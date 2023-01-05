@@ -1,0 +1,12 @@
+[package]
+name = "dynamic-struct"
+version = "0.1.0"
+edition = "2021"
+description = "A derive macro for creating push-based reactive properties for structs with named fields."
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = "1.0.23"
+syn = "1.0.107"
