@@ -8,13 +8,13 @@
 //! The types can also be left untouched, no need for wrapping and dereferencing.
 //!
 //! # How to use
-//! ### 1. Add as a dependency to the Cargo file
+//! 1. Add as a dependency to the Cargo file
 //! ```toml
 //! [dependencies]
 //! dynamic-struct = "*"
 //! ```
 //!
-//! ## 2. Add the derive macro to the struct and mark the properties that are dynamic
+//! 2. Add the derive macro to the struct and mark the properties that are dynamic
 //! ```ignore
 //! use dynamic_struct::Dynamic;
 //!
@@ -40,7 +40,7 @@
 //!
 //! The local method must have the call signature matching `fn name(&mut self)`.
 //!
-//! ## 3. Update the properties using the generated mutate functions
+//! 3. Update the properties using the generated mutate functions
 //! ```ignore
 //! let demo = Demo { a: 1, b: 2, c: 3 };
 //!
@@ -51,7 +51,7 @@
 //!
 //! # How it works
 //!
-//! ## 1. Functions are created to signal when a property is changed, it is populated with the methods that should be called.
+//! 1. Functions are created to signal when a property is changed, it is populated with the methods that should be called.
 //!
 //! ```ignore
 //! impl Demo {
@@ -64,7 +64,7 @@
 //!
 //! Note: properties that do not propagate changes will still be created but will be empty.
 //!
-//! ## 2. Functions are created for each property to update the property
+//! 2. Functions are created for each property to update the property
 //!
 //! For **non-dynamic** properties, the value can be set via a parameter matching the field type, then the field updated function is called (listed above).
 //!
@@ -91,8 +91,39 @@
 //! ```
 //!
 //! Note: be careful not to create cyclic dependencies!
-
-use proc_macro::TokenStream;
+//!
+//! # Configuration
+//!
+//! The names of the generated functions can be customised by declaring a struct attribute and overriding a prefix/suffix. e.g:
+//!
+//! ```ignore
+//! #[derive(Dynamic)]
+//! #[dynamic(setter_prefix = "set_", setter_suffix = "_value")]
+//! struct MyStruct {
+//!     a: u32,
+//!     b: u32,
+//! }
+//!
+//! fn main() {
+//!     let test = MyStruct { a: 1, b: 2 };
+//!
+//!     test.set_a_value(3);
+//!     test.set_b_value(4);
+//! }
+//! ```
+//!
+//! Properties that can specified include:
+//!
+//! | Name | Type | Comment |
+//! | - | - | - |
+//! | updated_prefix | str | Prefix for updated methods |
+//! | updated_suffix | str | Suffix for updated methods  |
+//! | setter_prefix | str | Prefix for setter methods (non-dynamic fields) |
+//! | setter_suffix | str | Suffix for setter methods (non-dynamic fields) |
+//! | update_prefix | str | Prefix for update methods (dynamic fields) |
+//! | update_suffix | str | Suffix for update methods (dynamic fields) |
+//!
+use bae::FromAttributes;
 use quote::{format_ident, quote};
 use std::collections::{HashMap, HashSet};
 use syn::{
@@ -100,8 +131,18 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
-    token, Data, DeriveInput, Fields, Ident, Token,
+    token, Data, DeriveInput, Fields, Ident, LitStr, Token,
 };
+
+#[derive(FromAttributes, Default, Debug)]
+struct Dynamic {
+    updated_prefix: Option<LitStr>,
+    updated_suffix: Option<LitStr>,
+    setter_prefix: Option<LitStr>,
+    setter_suffix: Option<LitStr>,
+    update_prefix: Option<LitStr>,
+    update_suffix: Option<LitStr>,
+}
 
 struct DynamicField {
     _paren_token: token::Paren,
@@ -124,37 +165,71 @@ impl Parse for DynamicField {
 
 const DYNAMIC_ATTR_NAME: &str = "dynamic";
 
-//TODO: make customisable per usage
-const UPDATED_METHOD_PREFIX: &str = "updated_";
-const UPDATED_METHOD_SUFFIX: &str = "";
+const DEFAULT_UPDATED_METHOD_PREFIX: &str = "updated_";
+const DEFAULT_UPDATED_METHOD_SUFFIX: &str = "";
 
-const UPDATE_METHOD_PREFIX: &str = "update_";
-const UPDATE_METHOD_SUFFIX: &str = "";
+const DEFAULT_UPDATE_METHOD_PREFIX: &str = "update_";
+const DEFAULT_UPDATE_METHOD_SUFFIX: &str = "";
 
-const SETTER_METHOD_PREFIX: &str = "update_";
-const SETTER_METHOD_SUFFIX: &str = "";
+const DEFAULT_SETTER_METHOD_PREFIX: &str = "update_";
+const DEFAULT_SETTER_METHOD_SUFFIX: &str = "";
 
 fn create_ident(ident: &Ident, prefix: &str, suffix: &str) -> Ident {
     format_ident!("{}{}{}", prefix, ident, suffix)
 }
 
-fn create_updated_ident(ident: &Ident) -> Ident {
-    create_ident(ident, UPDATED_METHOD_PREFIX, UPDATED_METHOD_SUFFIX)
-}
-
-fn create_setter_ident(ident: &Ident) -> Ident {
-    create_ident(ident, SETTER_METHOD_PREFIX, SETTER_METHOD_SUFFIX)
-}
-
-fn create_update_ident(ident: &Ident) -> Ident {
-    create_ident(ident, UPDATE_METHOD_PREFIX, UPDATE_METHOD_SUFFIX)
-}
-
 #[proc_macro_derive(Dynamic, attributes(dynamic))]
-pub fn derive_dynamic(input: TokenStream) -> TokenStream {
-    let DeriveInput { ident, data, .. } = parse_macro_input!(input);
+pub fn derive_dynamic(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let DeriveInput {
+        ident, data, attrs, ..
+    } = parse_macro_input!(input);
 
     //parse and merge the dynamic attribute for the struct
+    let config = Dynamic::try_from_attributes(&attrs)
+        .unwrap()
+        .unwrap_or_default();
+
+    let updated_method_prefix = config
+        .updated_prefix
+        .as_ref()
+        .map(|prefix| prefix.value())
+        .unwrap_or_else(|| DEFAULT_UPDATED_METHOD_PREFIX.to_string());
+    let updated_method_suffix = config
+        .updated_suffix
+        .as_ref()
+        .map(|prefix| prefix.value())
+        .unwrap_or_else(|| DEFAULT_UPDATED_METHOD_SUFFIX.to_string());
+    let setter_method_prefix = config
+        .setter_prefix
+        .as_ref()
+        .map(|prefix| prefix.value())
+        .unwrap_or_else(|| DEFAULT_SETTER_METHOD_PREFIX.to_string());
+    let setter_method_suffix = config
+        .setter_suffix
+        .as_ref()
+        .map(|prefix| prefix.value())
+        .unwrap_or_else(|| DEFAULT_SETTER_METHOD_SUFFIX.to_string());
+    let update_method_prefix = config
+        .update_prefix
+        .as_ref()
+        .map(|prefix| prefix.value())
+        .unwrap_or_else(|| DEFAULT_UPDATE_METHOD_PREFIX.to_string());
+    let update_method_suffix = config
+        .update_suffix
+        .as_ref()
+        .map(|prefix| prefix.value())
+        .unwrap_or_else(|| DEFAULT_UPDATE_METHOD_SUFFIX.to_string());
+
+    let create_updated_ident =
+        |ident: &Ident| create_ident(ident, &updated_method_prefix, &updated_method_suffix);
+
+    let create_setter_ident = |ident: &Ident| -> Ident {
+        create_ident(ident, &setter_method_prefix, &setter_method_suffix)
+    };
+
+    let create_update_ident = |ident: &Ident| -> Ident {
+        create_ident(ident, &update_method_prefix, &update_method_suffix)
+    };
 
     //validate the usage of this macro and extract the field attributes
     let fields = match data {

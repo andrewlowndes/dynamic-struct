@@ -1,6 +1,7 @@
 use dynamic_struct::Dynamic;
 
 #[derive(Default, Dynamic)]
+#[dynamic(setter_prefix = "set_", setter_suffix = "_value")]
 struct Demo {
     a: u32,
     b: u32,
@@ -42,16 +43,16 @@ fn main() {
     println!("d: {d}");
 
     println!("updating a...");
-    demo.update_a(4);
+    demo.set_a_value(4);
 
     let Demo { c, d, .. } = &demo;
     println!("c: {c}");
     println!("d: {d}");
 
     println!("updating a...");
-    demo.update_a(4);
+    demo.set_a_value(4);
     println!("updating b...");
-    demo.update_b(9);
+    demo.set_b_value(9);
 
     let Demo { c, d, .. } = &demo;
     println!("c: {c}");

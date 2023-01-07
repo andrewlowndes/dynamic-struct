@@ -9,9 +9,13 @@ The plumbing for adding *push-based* change propagation is done via macros at co
 The types can also be left untouched, no need for wrapping and dereferencing.
 
 ## How to use
-### 1. Add as a dependency to the Cargo file
+**1)** Add as a dependency to the Cargo file
+```toml
+[dependencies]
+dynamic-struct = "0.1"
+```
 
-### 2. Add the derive macro to the struct and mark the properties that are dynamic
+**2)** Add the derive macro to the struct and mark the properties that are dynamic
 ```rust
 use dynamic_struct::Dynamic;
 
@@ -37,7 +41,7 @@ The attribute for the properties has the following structure:
 
 The local method must have the call signature matching `fn name(&mut self)`.
 
-### 3. Update the properties using the generated mutate functions
+**3)** Update the properties using the generated mutate functions
 ```rust
 fn main() {
     let demo = Demo { a: 1, b: 2, c: 3 };
@@ -50,7 +54,7 @@ fn main() {
 
 ## How it works
 
-### 1. Functions are created to signal when a property is changed, it is populated with the methods that should be called.
+**1)** Functions are created to signal when a property is changed, it is populated with the methods that should be called.
 
 ```rust
 impl Demo {
@@ -63,7 +67,7 @@ impl Demo {
 
 Note: properties that do not propagate changes will still be created but will be empty.
 
-### 2. Functions are created for each property to update the property
+**2)** Functions are created for each property to update the property
 
 For **non-dynamic** properties, the value can be set via a parameter matching the field type, then the field updated function is called (listed above).
 
@@ -90,3 +94,34 @@ impl Demo {
 ```
 
 Note: be careful not to create cyclic dependencies!
+
+## Configuration
+
+The names of the generated functions can be customised by declaring a struct attribute and overriding a prefix/suffix. e.g:
+
+```Rust
+#[derive(Dynamic)]
+#[dynamic(setter_prefix = "set_", setter_suffix = "_value")]
+struct MyStruct {
+    a: u32,
+    b: u32,
+}
+
+fn main() {
+    let test = MyStruct { a: 1, b: 2 };
+
+    test.set_a_value(3);
+    test.set_b_value(4);
+}
+```
+
+Properties that can specified include:
+
+| Name | Type | Comment |
+| - | - | - |
+| updated_prefix | str | Prefix for updated methods |
+| updated_suffix | str | Suffix for updated methods  |
+| setter_prefix | str | Prefix for setter methods (non-dynamic fields) |
+| setter_suffix | str | Suffix for setter methods (non-dynamic fields) |
+| update_prefix | str | Prefix for update methods (dynamic fields) |
+| update_suffix | str | Suffix for update methods (dynamic fields) |

@@ -3,10 +3,16 @@ name = "dynamic-struct"
 version = "0.1.0"
 edition = "2021"
 description = "A derive macro for creating push-based reactive properties for structs with named fields."
+repository = "https://github.com/andrewlowndes/dynamic-struct"
+license = "MIT OR Apache-2.0"
+keywords = ["derive", "reactive", "macro"]
+categories = ["rust-patterns"]
 
 [lib]
 proc-macro = true
 
 [dependencies]
+bae = "0.1.7"
+proc-macro2 = "1.0.49"
 quote = "1.0.23"
 syn = "1.0.107"
